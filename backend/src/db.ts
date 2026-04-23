@@ -1,65 +1,33 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+import { Pool } from 'pg';
 
-const db = new Database(path.join(__dirname, '../database.db'));
+const rawUrl = process.env.DATABASE_URL;
 
-// Initialize tables
-db.exec(`
-  CREATE TABLE IF NOT EXISTS projects (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT
+if (!rawUrl) {
+  throw new Error(
+    'DATABASE_URL no está definida. En Supabase: Settings → Database → Connection string (URI). ' +
+      'Para Cloud Run suele usarse el pooler en modo Transaction (puerto 6543).'
   );
+}
 
-  CREATE TABLE IF NOT EXISTS papers (
-    id TEXT PRIMARY KEY,
-    projectId TEXT NOT NULL,
-    title TEXT NOT NULL,
-    year INTEGER,
-    authors TEXT, -- JSON array
-    labels TEXT, -- JSON array
-    paperTags TEXT, -- JSON array
-    metrics TEXT,
-    dataset TEXT,
-    core TEXT,
-    observations TEXT,
-    "group" TEXT,
-    relevance INTEGER,
-    importance INTEGER,
-    canvasData TEXT, -- JSON Excalidraw
-    pdfPath TEXT,
-    pdfHighlights TEXT, -- JSON highlights
-    FOREIGN KEY (projectId) REFERENCES projects(id) ON DELETE CASCADE
-  );
+/** Pooler Transaction (6543): Supabase recomienda `pgbouncer=true` para clientes como node-pg. */
+function normalizeDatabaseUrl(url: string): string {
+  const isSupabasePooler = url.includes('pooler.supabase.com');
+  if (!isSupabasePooler || /pgbouncer\s*=\s*true/i.test(url)) return url;
+  return url + (url.includes('?') ? '&' : '?') + 'pgbouncer=true';
+}
 
-  -- Migration: Add columns if they don't exist
-  PRAGMA table_info(papers);
-`);
+const connectionString = normalizeDatabaseUrl(rawUrl);
 
-try { db.exec('ALTER TABLE papers ADD COLUMN "group" TEXT'); } catch (e) {}
-try { db.exec('ALTER TABLE papers ADD COLUMN relevance INTEGER'); } catch (e) {}
-try { db.exec('ALTER TABLE papers ADD COLUMN importance INTEGER'); } catch (e) {}
-try { db.exec('ALTER TABLE papers ADD COLUMN paperTags TEXT'); } catch (e) {}
+const useSsl =
+  !/localhost|127\.0\.0\.1/i.test(connectionString) && !connectionString.includes('sslmode=disable');
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS edges (
-    id TEXT PRIMARY KEY,
-    projectId TEXT NOT NULL,
-    source TEXT NOT NULL,
-    target TEXT NOT NULL,
-    label TEXT,
-    FOREIGN KEY (projectId) REFERENCES projects(id) ON DELETE CASCADE,
-    FOREIGN KEY (source) REFERENCES papers(id) ON DELETE CASCADE,
-    FOREIGN KEY (target) REFERENCES papers(id) ON DELETE CASCADE
-  );
+export const pool = new Pool({
+  connectionString,
+  max: Number(process.env.PG_POOL_MAX || 10),
+  idleTimeoutMillis: 30_000,
+  ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+});
 
-  CREATE TABLE IF NOT EXISTS groups (
-    id TEXT PRIMARY KEY,
-    projectId TEXT NOT NULL,
-    name TEXT NOT NULL,
-    description TEXT,
-    FOREIGN KEY (projectId) REFERENCES projects(id) ON DELETE CASCADE
-  );
-`);
-
-export default db;
+pool.on('error', (err) => {
+  console.error('Unexpected PG pool error', err);
+});

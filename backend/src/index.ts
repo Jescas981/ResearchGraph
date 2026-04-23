@@ -1,8 +1,10 @@
+import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import routes from './routes';
+import { pool } from './db';
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -34,6 +36,19 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   res.status(500).json({ error: err.message || 'Internal Server Error' });
 });
 
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+const host = process.env.HOST || '0.0.0.0';
+const server = app.listen(Number(port), host, () => {
+  console.log(`Server running on http://${host}:${port}`);
 });
+
+const shutdown = async () => {
+  try {
+    await pool.end();
+  } catch (e) {
+    console.error('Pool shutdown error', e);
+  }
+  server.close(() => process.exit(0));
+};
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

@@ -1,7 +1,16 @@
 import axios from 'axios';
 import type { Project, Paper, Edge, Group } from '../types/index';
 
-const API_URL = 'http://localhost:3001/api';
+/** Orden: runtime (Cloud Run) → Vite env (dev) → localhost. */
+export function getApiBaseUrl(): string {
+  const runtime = typeof window !== 'undefined' ? window.__RG_API_URL__?.trim() : '';
+  if (runtime) return runtime.replace(/\/$/, '');
+  const env = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+  if (env) return env.replace(/\/$/, '');
+  return 'http://localhost:3001/api';
+}
+
+const API_URL = getApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_URL,
@@ -51,6 +60,7 @@ export const groupApi = {
     api.delete(`/groups/${id}`).then(res => res.data),
 };
 
-export const getPdfUrl = (path: string) => `${API_URL}/pdfs/${path}`;
+export const getPdfUrl = (pdfPath: string) =>
+  /^https?:\/\//i.test(pdfPath) ? pdfPath : `${getApiBaseUrl()}/pdfs/${pdfPath}`;
 
 export default api;
