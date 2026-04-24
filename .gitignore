@@ -15,12 +15,15 @@ backend/database.db-journal
 backend/uploads/*.pdf
 !backend/uploads/.gitkeep
 
-# Environment
+# Environment (no subir secretos)
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+backend/.env
+frontend/.env
+password.json
 
 # IDE / Editor
 .vscode/

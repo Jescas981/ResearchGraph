@@ -19,7 +19,9 @@ const AddPaperModal = ({ projectId, onClose, onSuccess }: AddPaperModalProps) =>
   const [bibtex, setBibtex] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [manualPdfName, setManualPdfName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const manualPdfInputRef = useRef<HTMLInputElement>(null);
 
   const cleanBibtexValue = (val: string) => {
     if (!val) return '';
@@ -31,24 +33,41 @@ const AddPaperModal = ({ projectId, onClose, onSuccess }: AddPaperModalProps) =>
     if (!title) return;
     setLoading(true);
     try {
-      const newPaper = await paperApi.create(projectId, { title, group, relevance, importance, labels: [], paperTags: [] });
-      onSuccess({ 
-        ...newPaper, 
-        projectId, 
-        authors: [], 
-        labels: [], 
+      const pdfFile = manualPdfInputRef.current?.files?.[0];
+      let pdfPath: string | null = null;
+      if (pdfFile && pdfFile.type === 'application/pdf') {
+        const up = await paperApi.uploadPdf(pdfFile);
+        pdfPath = up.pdfPath;
+      }
+
+      const newPaper = await paperApi.create(projectId, {
+        title,
+        group,
+        relevance,
+        importance,
+        labels: [],
         paperTags: [],
-        metrics: '', 
-        dataset: '', 
-        core: '', 
-        observations: '', 
-        group, 
-        relevance, 
-        importance, 
-        canvasData: null, 
-        pdfPath: null, 
-        pdfHighlights: [] 
+        ...(pdfPath ? { pdfPath } : {}),
+      });
+      onSuccess({
+        ...newPaper,
+        projectId,
+        authors: [],
+        labels: [],
+        paperTags: [],
+        metrics: '',
+        dataset: '',
+        core: '',
+        observations: '',
+        group,
+        relevance,
+        importance,
+        canvasData: null,
+        pdfPath: pdfPath ?? (newPaper as Paper).pdfPath ?? null,
+        pdfHighlights: [],
       } as Paper);
+      if (manualPdfInputRef.current) manualPdfInputRef.current.value = '';
+      setManualPdfName('');
       onClose();
     } catch (err) {
       setError('Failed to add paper');
@@ -174,6 +193,34 @@ const AddPaperModal = ({ projectId, onClose, onSuccess }: AddPaperModalProps) =>
                     onChange={e => setGroup(e.target.value)}
                   />
                 </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] px-1 flex items-center gap-2">
+                  <Upload size={12} className="text-blue-400" /> PDF (opcional)
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => manualPdfInputRef.current?.click()}
+                    className="text-xs font-bold px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-blue-400 transition-all"
+                  >
+                    Elegir PDF…
+                  </button>
+                  <span className="text-[10px] text-slate-400 truncate max-w-[180px]">
+                    {manualPdfName || 'Ninguno'}
+                  </span>
+                </div>
+                <input
+                  ref={manualPdfInputRef}
+                  type="file"
+                  hidden
+                  accept="application/pdf"
+                  onChange={(e) => {
+                    setError(null);
+                    setManualPdfName(e.target.files?.[0]?.name || '');
+                  }}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-6">
